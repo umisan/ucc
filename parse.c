@@ -1,60 +1,4 @@
-#include <ctype.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-//抽象構文木のノードの種類
-typedef enum {
-  ND_ADD,
-  ND_SUB,
-  ND_MUL,
-  ND_DIV,
-  ND_NUM,
-  ND_EQ,
-  ND_NEQ,
-  ND_LT,
-  ND_LE,
-  ND_GT,
-  ND_GE,
-} NodeKind;
-
-typedef struct Node Node;
-
-struct Node {
-  NodeKind kind;
-  Node *lhs;
-  Node *rhs;
-  int val;
-};
-
-
-//プロトタイプ宣言
-Node *expr();
-
-// トークンの種類
-typedef enum {
-  TK_RESERVED, //記号
-  TK_NUM, //整数トークン
-  TK_EOF, //入力の終わりを表すトークン
-} TokenKind;
-
-typedef struct Token Token;
-
-//入力プログラム
-char *user_input;
-
-//トークン型
-struct Token {
-  TokenKind kind; //トークンの型
-  Token *next;    //次の入力トークン
-  int val;        //kindがTK_NUMの場合、その数値
-  char *str;      //トークン文字列
-  int len;         //トークンの長さ
-};
-
-Token *token; //現在着目しているトークン
+#include "ucc.h"
 
 //エラーを報告するための関数
 //エラーがある場所を出力する
@@ -137,8 +81,15 @@ Token *tokenize(char *p) {
       p+=2;
       continue;
     }
+
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' || *p == '<' || *p == '>') {
       cur = new_token(TK_RESERVED, cur, p++, 1);
+      continue;
+    }
+
+    if ('a' <= *p && *p <= 'z') {
+      cur = new_token(TK_IDENT, cur, p++);
+      cur->len = 1;
       continue;
     }
 
@@ -171,7 +122,9 @@ Node *new_node_num(int val) {
   return node;
 }
 
+Node *ident() {
 
+}
 
 Node *primary() {
   if (consume("(")) {
@@ -180,6 +133,10 @@ Node *primary() {
     return node;
   }
 
+  if (token->kind == TK_IDENT) {
+    Node *node = ident();
+    return node;
+  }
   return new_node_num(expect_number());
 }
 
@@ -252,88 +209,3 @@ Node *expr() {
   return equality();
 }
 
-void gen(Node * node) {
-  if (node->kind == ND_NUM) {
-    printf("  push %d\n", node->val);
-    return;
-  }
-
-  gen(node->lhs);
-  gen(node->rhs);
-
-  printf(" pop rdi\n");
-  printf(" pop rax\n");
-
-  switch (node->kind) {
-    case ND_ADD:
-      printf("  add rax, rdi\n");
-      break;
-    case ND_SUB:
-      printf("  sub rax, rdi\n");
-      break;
-    case ND_MUL:
-      printf("  imul rax, rdi\n");
-      break;
-    case ND_DIV:
-      printf("  cqo\n");
-      printf("  idiv rdi\n");
-      break;
-    case ND_EQ:
-      printf("  cmp rax, rdi\n");
-      printf("  sete al\n");
-      printf("  movzb rax, al\n");
-      break;
-    case ND_NEQ:
-      printf("  cmp rax, rdi\n");
-      printf("  setne al\n");
-      printf("  movzb rax, al\n");
-      break;
-    case ND_LT:
-      printf("  cmp rax, rdi\n");
-      printf("  setl al\n");
-      printf("  movzb rax, al\n");
-      break;
-    case ND_LE:
-      printf("  cmp rax, rdi\n");
-      printf("  setle al\n");
-      printf("  movzb rax, al\n");
-      break;
-    case ND_GT:
-      printf("  cmp rdi, rax\n");
-      printf("  setl al\n");
-      printf("  movzb rax, al\n");
-      break;
-    case ND_GE:
-      printf("  cmp rdi, rax\n");
-      printf("  setle al\n");
-      printf("  movzb rax, al\n");
-      break;
-  }
-
-  printf(" push rax\n");
-}
-
-
-int main(int argc, char **argv) {
-  if(argc != 2) {
-    fprintf(stderr, "引数の個数が正しくありません\n");
-    return 1;
-  }
-  //入力文字列を保存する
-  user_input = argv[1];
-
-  //トークナイズする
-  token = tokenize(user_input);
-  Node *node = expr();
-
-  //アセンブリ前半部分
-  printf(".intel_syntax noprefix\n");
-  printf(".global main\n");
-  printf("main:\n"); 
-
-  gen(node);
-
-  printf("  pop rax\n");
-  printf("  ret\n");
-  return 0;
-}
